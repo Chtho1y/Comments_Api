@@ -14,7 +14,7 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
 DATABASE = 'database.db'
 
 # 配置日志
-logging.basicConfig(level=logging.DEBUG)  # 将日志级别改为 DEBUG
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # 数据库初始化
@@ -37,6 +37,21 @@ def get_db():
         db = g._database = sqlite3.connect(DATABASE)
     return db
 
+# 清理数据库中的无效数据
+def clean_database():
+    with get_db() as conn:
+        cursor = conn.execute('SELECT id, images FROM comments')
+        for row in cursor.fetchall():
+            comment_id, images_json = row
+            try:
+                images = json.loads(images_json) if images_json and images_json.strip() else []
+                conn.execute('UPDATE comments SET images = ? WHERE id = ?', 
+                             (json.dumps(images), comment_id))
+            except json.JSONDecodeError:
+                conn.execute('UPDATE comments SET images = ? WHERE id = ?', 
+                             ('[]', comment_id))
+        conn.commit()
+
 # 获取评论（带分页）
 @app.route('/comments', methods=['GET'])
 def get_comments():
@@ -55,7 +70,7 @@ def get_comments():
             comments = []
             for row in rows:
                 try:
-                    images = json.loads(row[2]) if row[2] else []
+                    images = json.loads(row[2]) if row[2] and row[2].strip() else []
                     comments.append({
                         "id": row[0],
                         "text": row[1],
@@ -65,8 +80,13 @@ def get_comments():
                     })
                 except json.JSONDecodeError as e:
                     logger.error(f"Error decoding JSON for comment {row[0]}: {str(e)}")
-                    # 跳过无效的评论，但不中断整个处理
-                    continue
+                    comments.append({
+                        "id": row[0],
+                        "text": row[1],
+                        "images": [],
+                        "author": row[3],
+                        "date": row[4]
+                    })
 
         logger.debug(f"Returning {len(comments)} comments")
         return jsonify(comments)
@@ -84,6 +104,10 @@ def add_comment():
 
         text = data.get('text', '')
         images = data.get('images', [])
+
+        # 确保 images 是一个列表
+        if not isinstance(images, list):
+            images = []
 
         # 检查图片大小和数量
         total_size = sum(len(image) for image in images)
@@ -112,6 +136,10 @@ def close_connection(exception):
     if db is not None:
         db.close()
 
-if __name__ == '__main__':
+@app.before_first_request
+def before_first_request():
     init_db()
+    clean_database()
+
+if __name__ == '__main__':
     app.run(host='0.0.0.0', port=7805, debug=True)
