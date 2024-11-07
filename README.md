@@ -11,4 +11,7 @@ pm2 status
 pm2 startup
 #按提示运行生成的命令
 pm2 save
+
+#删除database某个id行的数据（id用vscode查看）
+python deletedata.py <data_id>
 ```
