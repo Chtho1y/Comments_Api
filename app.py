@@ -5,7 +5,7 @@ from datetime import datetime
 import logging
 
 app = Flask(__name__)
-CORS(app)  # 允许跨域访问
+CORS(app, resources={r"/comments": {"origins": "https://www.aiqwq.com"}})
 
 # 增加最大请求大小限制
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
@@ -61,6 +61,11 @@ def add_comment():
 
         text = data.get('text', '')
         image = data.get('image', '')
+
+        # 检查图片大小
+        if len(image) > 16 * 1024 * 1024:  # 16MB in bytes
+            return jsonify({"error": "Image size exceeds 16MB limit"}), 413
+
         author = data.get('author', 'Anonymous User')
         date = datetime.now().isoformat()
 
