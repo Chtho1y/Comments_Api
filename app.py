@@ -6,7 +6,7 @@ import logging
 import json
 
 app = Flask(__name__)
-CORS(app, resources={r"/comments": {"origins": "https://www.aiqwq.com"}})
+CORS(app, resources={r"/comments": {"origins": "*"}}) # 允许所有源
 
 # 增加最大请求大小限制
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB
