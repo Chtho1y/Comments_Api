@@ -1,6 +1,6 @@
 # Comments_Api
 
-
+```bash
 pip install -r requirements.txt
 
 python app.py
@@ -10,3 +10,4 @@ pm2 status
 pm2 startup
 按提示运行生成的命令
 pm2 save
+```
