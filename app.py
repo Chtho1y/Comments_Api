@@ -3,6 +3,7 @@ from flask_cors import CORS
 import sqlite3
 from datetime import datetime
 import logging
+import json
 
 app = Flask(__name__)
 CORS(app, resources={r"/comments": {"origins": "https://www.aiqwq.com"}})
@@ -22,7 +23,7 @@ def init_db():
         conn.execute('''CREATE TABLE IF NOT EXISTS comments (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             text TEXT,
-            image TEXT,
+            images TEXT,
             author TEXT,
             date TEXT
         )''')
@@ -36,14 +37,18 @@ def get_db():
         db = g._database = sqlite3.connect(DATABASE)
     return db
 
-# 获取所有评论
+# 获取评论（带分页）
 @app.route('/comments', methods=['GET'])
 def get_comments():
     try:
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
+        offset = (page - 1) * limit
+
         with get_db() as conn:
-            cursor = conn.execute('SELECT * FROM comments ORDER BY id DESC')
+            cursor = conn.execute('SELECT * FROM comments ORDER BY id DESC LIMIT ? OFFSET ?', (limit, offset))
             comments = [
-                {"id": row[0], "text": row[1], "image": row[2], "author": row[3], "date": row[4]}
+                {"id": row[0], "text": row[1], "images": json.loads(row[2]), "author": row[3], "date": row[4]}
                 for row in cursor.fetchall()
             ]
         return jsonify(comments)
@@ -60,22 +65,25 @@ def add_comment():
             return jsonify({"error": "No data provided"}), 400
 
         text = data.get('text', '')
-        image = data.get('image', '')
+        images = data.get('images', [])
 
-        # 检查图片大小
-        if len(image) > 16 * 1024 * 1024:  # 16MB in bytes
-            return jsonify({"error": "Image size exceeds 16MB limit"}), 413
+        # 检查图片大小和数量
+        total_size = sum(len(image) for image in images)
+        if total_size > 16 * 1024 * 1024:  # 16MB in bytes
+            return jsonify({"error": "Total image size exceeds 16MB limit"}), 413
+        if len(images) > 4:
+            return jsonify({"error": "Maximum 4 images allowed"}), 400
 
         author = data.get('author', 'Anonymous User')
         date = datetime.now().isoformat()
 
         with get_db() as conn:
-            cursor = conn.execute('INSERT INTO comments (text, image, author, date) VALUES (?, ?, ?, ?)',
-                                  (text, image, author, date))
+            cursor = conn.execute('INSERT INTO comments (text, images, author, date) VALUES (?, ?, ?, ?)',
+                                  (text, json.dumps(images), author, date))
             conn.commit()
             comment_id = cursor.lastrowid
 
-        return jsonify({"id": comment_id, "text": text, "image": image, "author": author, "date": date})
+        return jsonify({"id": comment_id, "text": text, "images": images, "author": author, "date": date})
     except Exception as e:
         logger.error(f"Error adding comment: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
